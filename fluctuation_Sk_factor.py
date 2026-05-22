@@ -93,20 +93,20 @@ for T in T_vals:
     k_values = np.arange(L)
 
     # ----------------------------------------------------------
-    # Spatial correlation
+    # Spatial correlation — direct real-space calculation
     #   C_r = (1/L) * sum_i < xi_i * xi_{(i+r) mod L} >
     #
-    # Via circular correlation theorem:
-    #   sum_i xi_i * xi_{(i+r) mod L} = IFFT(|FFT(xi)|^2)[r]
-    # (numpy IFFT includes the 1/L factor, so dividing by L
-    #  gives the correctly normalised c_r for each realization)
+    # For each r: shift xi circularly by r, multiply element-wise,
+    # then average over all sites and all realizations.
     # ----------------------------------------------------------
 
-    corr_prey = cp.fft.ifft(cp.abs(fft_prey)**2, axis=1).real / L   # (R, L)
-    corr_pred = cp.fft.ifft(cp.abs(fft_pred)**2, axis=1).real / L
+    print("  Computing spatial correlations...")
+    C_prey = cp.zeros(L // 2, dtype=cp.float64)
+    C_pred = cp.zeros(L // 2, dtype=cp.float64)
 
-    C_prey = cp.mean(corr_prey, axis=0)[:L // 2]   # r = 0 .. L/2-1
-    C_pred = cp.mean(corr_pred, axis=0)[:L // 2]
+    for r in range(L // 2):
+        C_prey[r] = cp.mean(xi_prey * cp.roll(xi_prey, -r, axis=1))
+        C_pred[r] = cp.mean(xi_pred * cp.roll(xi_pred, -r, axis=1))
 
     r_values = np.arange(L // 2)
 
