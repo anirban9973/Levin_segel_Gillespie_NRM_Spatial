@@ -5,18 +5,11 @@
 #SBATCH --partition=edr1-al9_large
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=24
-#SBATCH --mem=32G
-#SBATCH --array=1-20
+#SBATCH --mem=64G
+#SBATCH --time=12:00:00
+#SBATCH --array=1-100
 
-# Only the first task wipes and recreates the logs folder.
-# All other tasks sleep briefly to avoid a race on mkdir.
-if [ "${SLURM_ARRAY_TASK_ID}" -eq 1 ]; then
-    rm -rf logs
-    mkdir -p logs
-else
-    sleep 10
-    mkdir -p logs
-fi
+mkdir -p logs
 
 start=$(date +%s)
 echo "Job ${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID} started at: $(date)"

@@ -61,8 +61,10 @@ L                        128       # number of lattice sites
 V                        100.0     # volume (controls particle number)
 
 # Temporal settings
-T_length                 32768     # simulation length after transient (2^15)
 t_transient              1000.0    # burn-in time
+T_int_1                  1         # integration window 1
+T_int_2                  32        # integration window 2
+T_int_3                  4096      # integration window 3
 
 # Reaction rates
 b    0.5    # prey birth rate
@@ -106,15 +108,21 @@ The array job runs **20 jobs × 24 threads × 100 realizations = 48,000 configur
 
 ## Output
 
-Each thread writes one HDF5 file: `output_job<J>_thread<T>.h5`
+One HDF5 file per array job: `output_job<J>.h5`
+
+Each job produces 2400 rows (24 threads × 100 realizations). Three integration windows yield six density datasets:
 
 | Dataset | Shape | Description |
 |---------|-------|-------------|
-| `prey` | `(100, L)` | time-integrated prey density per realization |
-| `predator` | `(100, L)` | time-integrated predator density per realization |
-| `seeds` | `(100,)` | unique seed (global realization identifier) |
+| `prey_T1` | `(2400, L)` | time-integrated prey density, window T=1 |
+| `prey_T32` | `(2400, L)` | time-integrated prey density, window T=32 |
+| `prey_T4096` | `(2400, L)` | time-integrated prey density, window T=4096 |
+| `predator_T1` | `(2400, L)` | time-integrated predator density, window T=1 |
+| `predator_T32` | `(2400, L)` | time-integrated predator density, window T=32 |
+| `predator_T4096` | `(2400, L)` | time-integrated predator density, window T=4096 |
+| `seeds` | `(2400,)` | unique seed (global realization identifier) |
 
-Results are written **immediately after each realization** — partial results are preserved if the job is interrupted.
+All three windows are collected from a **single simulation run** starting immediately after the transient. The simulation advances for `max(T_int) + 5` time units; shorter windows stop accumulating once their count is reached. Results are written per-thread in one critical section after all 100 realizations finish.
 
 ## File Structure
 

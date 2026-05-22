@@ -5,11 +5,15 @@
 
 # Lattice and volume
 L                        128
-V                        100.0
+V                        1000.0
 
-# Temporal settings  (T_length = 2^15 = 32768)
-T_length                 32768
+# Temporal settings
+# Three integration windows (after transient): T_int_1 < T_int_2 < T_int_3
+# Simulation runs for max(T_int) + 5 after the transient.
 t_transient              1000.0
+T_int_1                  1
+T_int_2                  32
+T_int_3                  4096
 
 # Reaction rates
 b                        0.5
@@ -21,7 +25,7 @@ d2P                      0.0
 d1H                      0.0
 d2H                      0.5
 
-# Diffusion prefactor and rates
+# Diffusion prefactor and rates (bare multipliers — scaled by z in code)
 z                        2.0
 mu1P                     1.0
 mu2P                     0.0
@@ -31,4 +35,4 @@ nu2H                     0.0
 # Job configuration
 # n_threads must match --cpus-per-task in job.sh
 n_threads                24
-realizations_per_thread  100
+realizations_per_thread  1

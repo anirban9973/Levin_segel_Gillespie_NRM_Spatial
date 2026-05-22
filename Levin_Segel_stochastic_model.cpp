@@ -33,7 +33,8 @@ struct Params {
   double V;
   double b, e, p1, p2, d1P, d2P, d1H, d2H;
   double z, mu1P, mu2P, nu1H, nu2H;
-  double T_length, t_transient;
+  double t_transient;
+  std::vector<double> T_int;   // integration windows, e.g. {1, 32, 4096}
   int    n_threads, realizations_per_thread;
 };
 
@@ -68,7 +69,7 @@ Params read_params(const std::string& filename) {
   p.mu2P                   = raw.at("mu2P");
   p.nu1H                   = raw.at("nu1H");
   p.nu2H                   = raw.at("nu2H");
-  p.T_length               = raw.at("T_length");
+  p.T_int = { raw.at("T_int_1"), raw.at("T_int_2"), raw.at("T_int_3") };
   p.t_transient            = raw.at("t_transient");
   p.n_threads              = static_cast<int>(raw.at("n_threads"));
   p.realizations_per_thread = static_cast<int>(raw.at("realizations_per_thread"));
@@ -94,8 +95,8 @@ private:
   double z, mu1P, mu2P, nu1H, nu2H;
 
   // Temporal parameters
-  double delta_t, T_length, t_transient, t_final;
-  long   total_data_point;
+  double delta_t, t_transient, t_final;
+  std::vector<double> T_int;
 
   // Seed stored for error reporting
   unsigned int seed;
@@ -106,8 +107,8 @@ private:
   std::vector<Element> time_heap;
   std::vector<int> SpatialList;
 
-  // Time-integrated spectrum accumulators
-  std::vector<double> prey_spectrum_k, predator_spectrum_k;
+  // Time-integrated spectrum accumulators — one per integration window
+  std::vector<std::vector<double>> prey_spectra, pred_spectra;
 
   // Per-instance RNG — ensures thread safety
   std::mt19937 gen;
@@ -145,17 +146,16 @@ public:
     d1P(p.d1P), d2P(p.d2P), d1H(p.d1H), d2H(p.d2H),
     z(p.z), mu1P(p.mu1P), mu2P(p.mu2P), nu1H(p.nu1H), nu2H(p.nu2H),
     delta_t(1.0),
-    T_length(p.T_length),
     t_transient(p.t_transient),
-    t_final(p.t_transient + p.T_length + 5.0),
-    total_data_point(static_cast<long>(p.T_length)),
+    t_final(p.t_transient + *std::max_element(p.T_int.begin(), p.T_int.end()) + 5.0),
+    T_int(p.T_int),
     seed(seed_val),
     prey(p.L, 0), predator(p.L, 0),
     propensity(p.L),
     time_heap(p.L),
     SpatialList(p.L),
-    prey_spectrum_k(p.L, 0.0),
-    predator_spectrum_k(p.L, 0.0),
+    prey_spectra(p.T_int.size(), std::vector<double>(p.L, 0.0)),
+    pred_spectra(p.T_int.size(), std::vector<double>(p.L, 0.0)),
     gen(seed_val),
     real_ran(0.0, 1.0),
     int_ran(0, static_cast<int>(p.L - 1))
@@ -197,8 +197,9 @@ public:
 
   void run() {
 
-    double data_collection_time = t_transient;
-    long   collected_data_count = 0;
+    size_t n_windows = T_int.size();
+    std::vector<double> data_collection_time(n_windows, t_transient);
+    std::vector<long>   collected_data_count(n_windows, 0L);
     std::vector<int> tag_sites;
 
     while (time_heap[0].even < t_final) {
@@ -263,14 +264,17 @@ public:
         break;
       }
 
-      // time-integrated data collection
-      if (current_time > data_collection_time && collected_data_count < total_data_point) {
-        for (size_t r = 0; r < static_cast<size_t>(L); r++) {
-          prey_spectrum_k[r]     += prey[r]     * delta_t;
-          predator_spectrum_k[r] += predator[r] * delta_t;
+      // time-integrated data collection — independent for each window
+      for (size_t j = 0; j < n_windows; j++) {
+        long max_count = static_cast<long>(T_int[j] / delta_t);
+        if (current_time > data_collection_time[j] && collected_data_count[j] < max_count) {
+          for (long r = 0; r < L; r++) {
+            prey_spectra[j][r] += prey[r]     * delta_t;
+            pred_spectra[j][r] += predator[r] * delta_t;
+          }
+          data_collection_time[j] += delta_t;
+          collected_data_count[j]++;
         }
-        data_collection_time += delta_t;
-        collected_data_count++;
       }
 
       // propensity update for event site and (if diffusion) affected neighbor
@@ -316,17 +320,10 @@ public:
     } // end of dynamics
   }
 
-  // Normalize accumulators — call once after run()
-  void finalize() {
-    double n = static_cast<double>(total_data_point);
-    for (long i = 0; i < L; i++) {
-      prey_spectrum_k[i]     /= n;
-      predator_spectrum_k[i] /= n;
-    }
-  }
+  void finalize() {}  // accumulators already hold raw time integrals
 
-  const std::vector<double>& prey_spectrum()     const { return prey_spectrum_k; }
-  const std::vector<double>& predator_spectrum() const { return predator_spectrum_k; }
+  const std::vector<double>& prey_spectrum(int j)     const { return prey_spectra[j]; }
+  const std::vector<double>& predator_spectrum(int j) const { return pred_spectra[j]; }
   unsigned int get_seed() const { return seed; }
 
 };
@@ -359,18 +356,31 @@ int main(int argc, char *argv[]) {
   // One HDF5 file per array job, created before the parallel region (thread-safe)
   std::string h5file = "output_job" + std::to_string(job_id) + ".h5";
   HighFive::File file(h5file, HighFive::File::Truncate);
-  auto prey_dset = file.createDataSet<double>(      "prey",     HighFive::DataSpace({R_total, L}));
-  auto pred_dset = file.createDataSet<double>(      "predator", HighFive::DataSpace({R_total, L}));
-  auto seed_dset = file.createDataSet<unsigned int>("seeds",    HighFive::DataSpace({R_total}));
+
+  // Build dataset names from T_int values
+  std::vector<std::string> T_labels;
+  for (double t : params.T_int)
+    T_labels.push_back(std::to_string(static_cast<long>(t)));
+
+  std::vector<HighFive::DataSet> prey_dsets, pred_dsets;
+  for (const auto& lbl : T_labels) {
+    prey_dsets.push_back(file.createDataSet<double>("prey_T"     + lbl, HighFive::DataSpace({R_total, L})));
+    pred_dsets.push_back(file.createDataSet<double>("predator_T" + lbl, HighFive::DataSpace({R_total, L})));
+  }
+  auto seed_dset = file.createDataSet<unsigned int>("seeds", HighFive::DataSpace({R_total}));
 
   #pragma omp parallel num_threads(n_threads)
   {
     int thread_id = omp_get_thread_num();
 
-    // Accumulate this thread's realizations in memory while running in parallel
-    std::vector<std::vector<double>> prey_buf(realizations_per_thread);
-    std::vector<std::vector<double>> pred_buf(realizations_per_thread);
-    std::vector<unsigned int>        seed_buf(realizations_per_thread);
+    int n_windows = static_cast<int>(params.T_int.size());
+
+    // Per-window buffers: [window][realization][site]
+    std::vector<std::vector<std::vector<double>>> prey_bufs(n_windows,
+        std::vector<std::vector<double>>(realizations_per_thread));
+    std::vector<std::vector<std::vector<double>>> pred_bufs(n_windows,
+        std::vector<std::vector<double>>(realizations_per_thread));
+    std::vector<unsigned int> seed_buf(realizations_per_thread);
 
     for (int local_idx = 0; local_idx < realizations_per_thread; local_idx++) {
 
@@ -383,21 +393,25 @@ int main(int argc, char *argv[]) {
       sim.run();
       sim.finalize();
 
-      prey_buf[local_idx] = sim.prey_spectrum();
-      pred_buf[local_idx] = sim.predator_spectrum();
+      for (int j = 0; j < n_windows; j++) {
+        prey_bufs[j][local_idx] = sim.prey_spectrum(j);
+        pred_bufs[j][local_idx] = sim.predator_spectrum(j);
+      }
       seed_buf[local_idx] = seed;
     }
 
-    // All 100 simulations done — dump the whole block in one critical section.
+    // All realizations done — dump the whole block in one critical section.
     // Row range for this thread: [thread_id*R, (thread_id+1)*R)
-    size_t R      = static_cast<size_t>(realizations_per_thread);
+    size_t R         = static_cast<size_t>(realizations_per_thread);
     size_t row_start = static_cast<size_t>(thread_id) * R;
 
     #pragma omp critical (hdf5)
     {
-      prey_dset.select({row_start, 0}, {R, L}).write(prey_buf);
-      pred_dset.select({row_start, 0}, {R, L}).write(pred_buf);
-      seed_dset.select({row_start},    {R}   ).write(seed_buf);
+      for (int j = 0; j < n_windows; j++) {
+        prey_dsets[j].select({row_start, 0}, {R, L}).write(prey_bufs[j]);
+        pred_dsets[j].select({row_start, 0}, {R, L}).write(pred_bufs[j]);
+      }
+      seed_dset.select({row_start}, {R}).write(seed_buf);
     }
 
   } // end parallel
