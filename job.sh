@@ -2,7 +2,6 @@
 #SBATCH --job-name=turing_model
 #SBATCH --output=logs/output_%A_%a.txt
 #SBATCH --error=logs/error_%A_%a.txt
-#SBATCH --partition=edr1-al9_large
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=24
 #SBATCH --mem=64G
