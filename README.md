@@ -85,7 +85,7 @@ nu2H 0.0   # predator coupled diffusion
 
 # Job configuration (n_threads must match --cpus-per-task in job.sh)
 n_threads                24
-realizations_per_thread  100
+realizations_per_thread  1
 ```
 
 > **Note:** `mu1P`, `mu2P`, `nu1H`, `nu2H` are bare multipliers. The actual rates used in the simulation are `z × value`.
