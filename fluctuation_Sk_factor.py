@@ -8,7 +8,7 @@ import cupy as cp
 # Parameters — must match input.dat
 # ============================================================
 
-V      = 100.0
+V      = 1000.0
 T_vals = [1, 32, 4096]
 
 OUT_DIR = "fluctuations_and_spectrums"
