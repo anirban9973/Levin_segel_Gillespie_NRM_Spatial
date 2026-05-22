@@ -1,6 +1,5 @@
 #!/bin/bash
 #SBATCH --job-name=fluct_sk
-#SBATCH --partition=v100-al9_short
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
@@ -13,11 +12,9 @@
 # Environment
 # ============================================================
 
-module purge
-module load cuda/12.6.0
-
-source ~/.bashrc
+module load anaconda3/2025.12
 conda activate data_analysis
+
 
 # ============================================================
 # Run
