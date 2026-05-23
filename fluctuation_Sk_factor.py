@@ -40,10 +40,23 @@ for T in T_vals:
     # ----------------------------------------------------------
 
     all_prey, all_pred = [], []
+
     for path in h5_files:
-        with h5py.File(path, "r") as f:
-            all_prey.append(f[f"prey_T{lbl}"][:])
-            all_pred.append(f[f"predator_T{lbl}"][:])
+
+        try:
+            with h5py.File(path, "r") as f:
+
+                # basic integrity check
+                if f"prey_T{lbl}" not in f or f"predator_T{lbl}" not in f:
+                    print(f"Skipping incomplete file: {path}")
+                    continue
+
+                all_prey.append(f[f"prey_T{lbl}"][:])
+                all_pred.append(f[f"predator_T{lbl}"][:])
+
+        except Exception as e:
+            print(f"Skipping corrupted file {path}: {e}")
+            continue
 
     prey = np.concatenate(all_prey, axis=0)   # (R_total, L)
     pred = np.concatenate(all_pred, axis=0)
