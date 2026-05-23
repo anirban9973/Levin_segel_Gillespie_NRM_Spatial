@@ -412,6 +412,7 @@ int main(int argc, char *argv[]) {
         pred_dsets[j].select({row_start, 0}, {R, L}).write(pred_bufs[j]);
       }
       seed_dset.select({row_start}, {R}).write(seed_buf);
+      file.flush();
     }
 
   } // end parallel
