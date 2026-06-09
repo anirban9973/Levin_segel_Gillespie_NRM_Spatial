@@ -1,0 +1,31 @@
+# ============================================================
+# Input parameters — single realization time-series study
+# ============================================================
+
+# Lattice and volume
+L                        128
+V                        1000.0
+
+# Temporal settings
+t_transient              1000.0
+T_length                 32768.0
+
+# RNG seed
+seed                     42
+
+# Reaction rates
+b                        0.5
+e                        0.5
+p1                       1.0
+p2                       0.0
+d1P                      0.0
+d2P                      0.0
+d1H                      0.0
+d2H                      0.5
+
+# Diffusion prefactor and rates (bare multipliers — scaled by z in code)
+z                        2.0
+mu1P                     1.0
+mu2P                     0.0
+nu1H                     20.0
+nu2H                     0.0
